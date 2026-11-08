@@ -5,6 +5,7 @@ import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildHouse } from './house3d.js';
+import { THEMES, pickScenery, buildScenery, seedFrom } from './scenery.js';
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -31,22 +32,29 @@ const skyCanvas = document.createElement('canvas');
 skyCanvas.width = 2;
 skyCanvas.height = 512;
 const sky = skyCanvas.getContext('2d');
-const grad = sky.createLinearGradient(0, 0, 0, 512);
-grad.addColorStop(0, '#6f9fd1');
-grad.addColorStop(0.55, '#b7d0e6');
-grad.addColorStop(1, '#e9eef0');
-sky.fillStyle = grad;
-sky.fillRect(0, 0, 2, 512);
 const skyTex = new THREE.CanvasTexture(skyCanvas);
 skyTex.colorSpace = THREE.SRGBColorSpace;
 scene.background = skyTex;
 scene.fog = new THREE.Fog('#dfe6ea', 70, 260);
 
+function paintSky([top, mid, bottom]) {
+  const grad = sky.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0, top);
+  grad.addColorStop(0.55, mid);
+  grad.addColorStop(1, bottom);
+  sky.fillStyle = grad;
+  sky.fillRect(0, 0, 2, 512);
+  skyTex.needsUpdate = true;
+}
+paintSky(['#6f9fd1', '#b7d0e6', '#e9eef0']);
+
 // Soft image-based lighting for realistic reflections on glass and metal.
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 600);
+// Near plane at 0.5 m (not 0.1) keeps depth precision high far away, so flat layers like
+// road-on-grass don't flicker (z-fighting). The orbit controls never get closer than 4 m anyway.
+const camera = new THREE.PerspectiveCamera(38, 1, 0.5, 3000);
 camera.position.set(-18, 9, 30);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -54,7 +62,8 @@ controls.maxPolarAngle = Math.PI / 2 - 0.03;
 controls.minDistance = 4;
 controls.maxDistance = 150;
 
-scene.add(new THREE.HemisphereLight('#dbe8ff', '#6b7a55', 0.35));
+const hemi = new THREE.HemisphereLight('#dbe8ff', '#6b7a55', 0.35);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight('#fff4e3', 2.6);
 sun.position.set(-25, 35, 28);
 sun.castShadow = true;
@@ -94,21 +103,79 @@ function clearHouse() {
   current = null;
 }
 
+// --- Scenery -----------------------------------------------------------------
+// Each design gets its own scenery (seeded by the design), so it stays the same every time you
+// look at it. The menu picks a setting; the dice button rolls a different one.
+const SCENERY_KEY = 'houseDesigner.scenery';
+let sceneryChoice = 'suburb'; // default setting; viewers can switch it in the menu
+try {
+  sceneryChoice = localStorage.getItem(SCENERY_KEY) || 'suburb';
+} catch {
+  /* private mode */
+}
+let reroll = 0;
+let lastShown = null;
+
+const sceneryMenu = $('scenery');
+for (const [key, name] of Object.entries(THEMES)) sceneryMenu.add(new Option(name, key));
+// A saved choice that no longer exists (e.g. a removed setting) falls back to the default.
+if (!THEMES[sceneryChoice] && sceneryChoice !== 'random') sceneryChoice = 'suburb';
+sceneryMenu.value = sceneryChoice;
+sceneryMenu.addEventListener('change', () => {
+  sceneryChoice = sceneryMenu.value;
+  try {
+    localStorage.setItem(SCENERY_KEY, sceneryChoice);
+  } catch {
+    /* ignore */
+  }
+  if (lastShown) showPlan(lastShown.plan, lastShown.req);
+});
+$('reroll').addEventListener('click', () => {
+  reroll++;
+  if (lastShown) showPlan(lastShown.plan, lastShown.req);
+});
+
+function applyLight(light) {
+  paintSky(light.sky);
+  scene.fog.color.set(light.fog.color);
+  scene.fog.near = light.fog.near;
+  scene.fog.far = light.fog.far;
+  sun.color.set(light.sun.color);
+  sun.intensity = light.sun.intensity;
+  sun.position.set(...light.sun.position);
+  hemi.color.set(light.hemi.sky);
+  hemi.groundColor.set(light.hemi.ground);
+  hemi.intensity = light.hemi.intensity;
+}
+
 function showPlan(plan, req) {
   clearHouse();
-  current = buildHouse(plan, req);
+  lastShown = { plan, req };
+  const seed = seedFrom(`${plan.name}|${req.lotWidth}|${req.lotDepth}|${reroll}`);
+  const look = pickScenery(seed, sceneryChoice);
+  current = buildHouse(plan, req, { leafColors: look.leaf });
+  const shot = defaultView(current);
+  current.root.add(buildScenery(look, current.site, { x: shot.position.x, z: shot.position.z }));
+  applyLight(look.light);
+  $('sceneryLabel').textContent = look.label;
   scene.add(current.root);
   applyToggles();
   $('empty').hidden = true;
   $('exportBtn').disabled = false;
   if (!framed) {
-    // Street-side three-quarter view, like an architectural render.
-    const { center, size } = current;
-    const dist = Math.max(16, size * 1.9);
-    controls.target.copy(center);
-    camera.position.set(center.x - dist * 0.55, center.y + dist * 0.28, center.z + dist * 0.85);
+    controls.target.copy(shot.target);
+    camera.position.copy(shot.position);
     framed = true;
   }
+}
+
+// Street-side three-quarter view, like an architectural render.
+function defaultView({ center, size }) {
+  const dist = Math.max(16, size * 1.9);
+  return {
+    target: center.clone(),
+    position: new THREE.Vector3(center.x - dist * 0.55, center.y + dist * 0.28, center.z + dist * 0.85),
+  };
 }
 
 // Room labels only show for the level you can actually see into:
@@ -276,9 +343,11 @@ if (params.has('demo')) {
     ],
   };
   if (params.has('noroof')) $('showRoof').checked = false;
+  if (THEMES[params.get('scenery')]) sceneryMenu.value = sceneryChoice = params.get('scenery');
   showPlan(demoPlan, demoReq);
   if (params.get('view') === 'left') camera.position.set(current.center.x - 30, current.center.y + 6, current.center.z + 4);
   if (params.get('view') === 'top') camera.position.set(current.center.x, current.center.y + 40, current.center.z + 0.1);
+  if (params.get('view') === 'far') camera.position.set(current.center.x + 70, current.center.y + 75, current.center.z + 110);
 }
 
 let pendingRounds = [];

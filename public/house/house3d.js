@@ -194,7 +194,8 @@ function openingsFor(seg, level, frontDoorSeg, st) {
 // Builder
 // ---------------------------------------------------------------------------
 
-export function buildHouse(plan, req) {
+// opts.leafColors: shrub colors chosen by the scenery (season / climate).
+export function buildHouse(plan, req, opts = {}) {
   const st = STYLES[plan.style] || STYLES.modern;
   const lotW = req.lotWidth;
   const lotD = req.lotDepth;
@@ -229,8 +230,7 @@ export function buildHouse(plan, req) {
     handle: std({ color: '#c9c3b6', metalness: 0.9, roughness: 0.3 }),
     plinth: std({ map: textures.stone(), color: st.big ? '#8f8f8f' : '#a39b90' }),
     paving: std({ map: textures.paving() }),
-    grass: std({ map: textures.grass(), roughness: 1 }),
-    asphalt: std({ map: textures.asphalt(), roughness: 0.95 }),
+    asphalt: std({ map: textures.asphalt(), roughness: 0.95, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 }),
     curb: std({ color: '#b9b6b0' }),
     stair: std({ color: '#7d6a58', roughness: 0.7 }),
     slab: std({ color: '#d9d5cf' }),
@@ -239,8 +239,9 @@ export function buildHouse(plan, req) {
     fence: std({ color: st.fence, roughness: 0.8 }),
     trunk: std({ color: '#5b4330', roughness: 1 }),
     line: std({ color: '#f1f1f1' }),
+    yellow: std({ color: '#e0b532' }),
   };
-  const leafMats = ['#4f7a3a', '#5d8a42', '#46703a', '#6a9446'].map((c) => std({ color: c, roughness: 1, flatShading: true }));
+  const leafMats = (opts.leafColors || ['#4f7a3a', '#5d8a42', '#46703a', '#6a9446']).map((c) => std({ color: c, roughness: 1, flatShading: true }));
   const floorMats = {};
   const floorMat = (type) => {
     const t = FLOOR_TEX[type] || 'woodFloor';
@@ -480,7 +481,7 @@ export function buildHouse(plan, req) {
           for (let x = seg.a + 0.6; x < seg.b - 0.4; x += 1.1) {
             if (openings.some((o) => o.bottom <= EPS && x > o.start - 1.6 && x < o.end + 1.6)) continue;
             const s = 0.35 + rand() * 0.2;
-            const shrub = mesh(new THREE.IcosahedronGeometry(s, 1), leafMats[Math.floor(rand() * 4)], g);
+            const shrub = mesh(new THREE.IcosahedronGeometry(s, 1), leafMats[Math.floor(rand() * leafMats.length)], g);
             shrub.position.set(x, -BASE + s * 0.7, out * (EXT_T / 2 + 0.55));
             shrub.scale.y = 0.8;
           }
@@ -594,16 +595,17 @@ export function buildHouse(plan, req) {
   // --- Site ----------------------------------------------------------------
   const site = new THREE.Group();
   root.add(site);
-  const big = 400;
-  plane(big, big, M.grass, 0, 0, 0, site);
+  const big = 4000; // the street runs out past the fog
   const sidewalkD = 1.8;
-  const roadD = 9;
+  const roadD = 14; // four 3.5 m lanes
   const zSidewalk = lotD / 2 + sidewalkD / 2;
   const zRoad = lotD / 2 + sidewalkD + 0.25 + roadD / 2;
   box(big, 0.12, sidewalkD, M.paving, 0, 0.06, zSidewalk, site, [big, sidewalkD]);
   box(big, 0.16, 0.25, M.curb, 0, 0.04, lotD / 2 + sidewalkD + 0.125, site);
-  plane(big, roadD, M.asphalt, 0, 0.01, zRoad, site);
-  for (let x = -big / 2; x < big / 2; x += 6) plane(3, 0.15, M.line, x, 0.02, zRoad, site);
+  plane(big, roadD, M.asphalt, 0, 0.02, zRoad, site);
+  // Double yellow centre line, dashed white lane lines (they fade into the fog).
+  for (const dz of [-0.1, 0.1]) plane(600, 0.12, M.yellow, 0, 0.045, zRoad + dz, site);
+  for (let x = -300; x < 300; x += 9) for (const dz of [-3.5, 3.5]) plane(3, 0.13, M.line, x, 0.045, zRoad + dz, site);
 
   // Driveway from the garage door to the street, and a path to the front door.
   if (garageRoom) {
@@ -640,42 +642,25 @@ export function buildHouse(plan, req) {
   fenceRun(X(lotW), fenceFront, X(lotW), Z(lotD));
   fenceRun(X(0), Z(lotD), X(lotW), Z(lotD));
 
-  // Trees: in the back yard, at the front corners if there is space, and on the neighbouring lots.
+  // Bounds of the house for framing the camera and for placing scenery.
   const allRooms = floors.flatMap((f) => f.rooms);
-  const maxY = Math.max(...allRooms.map((r) => r.y + r.d));
-  const minY = Math.min(...allRooms.map((r) => r.y));
-  const spots = [];
-  if (lotD - maxY > 4.5) for (const fx of [0.22, 0.75]) spots.push([lotW * fx, (maxY + lotD) / 2 + (rand() - 0.5)]);
-  if (minY > 3.5) {
-    for (const x of [1.6, lotW - 1.6]) {
-      const clearDrive = !garageRoom || x < garageRoom.x - 1.5 || x > garageRoom.x + garageRoom.w + 1.5;
-      const clearPath = !frontDoor || Math.abs(X(x) - frontDoor.x) > 2.5;
-      if (clearDrive && clearPath) spots.push([x, minY / 2]);
-    }
-  }
-  spots.push([-5, lotD * 0.45], [lotW + 5, lotD * 0.6], [-7, lotD * 0.8], [lotW + 6, lotD * 0.2]);
-  for (const [x, y] of spots) addTree(X(x), Z(y), 0.8 + rand() * 0.5);
-
-  function addTree(x, z, s) {
-    const t = new THREE.Group();
-    const trunk = mesh(new THREE.CylinderGeometry(0.12 * s, 0.2 * s, 2.4 * s, 8), M.trunk, t);
-    trunk.position.y = 1.2 * s;
-    const blobs = 4 + Math.floor(rand() * 3);
-    for (let i = 0; i < blobs; i++) {
-      const r = (1.1 + rand() * 0.8) * s;
-      const leaf = mesh(new THREE.IcosahedronGeometry(r, 1), leafMats[Math.floor(rand() * 4)], t);
-      leaf.position.set((rand() - 0.5) * 1.6 * s, (2.8 + rand() * 1.6) * s, (rand() - 0.5) * 1.6 * s);
-    }
-    t.position.set(x, 0, z);
-    t.rotation.y = rand() * Math.PI * 2;
-    site.add(t);
-  }
-
-  // Bounds of the house for framing the camera.
   const minX = Math.min(...allRooms.map((r) => r.x));
   const maxX = Math.max(...allRooms.map((r) => r.x + r.w));
+  const minY = Math.min(...allRooms.map((r) => r.y));
+  const maxY = Math.max(...allRooms.map((r) => r.y + r.d));
   const center = new THREE.Vector3(X((minX + maxX) / 2), BASE + (floors.length * H) / 2, Z((minY + maxY) / 2));
   const size = Math.max(maxX - minX, maxY - minY, floors.length * H);
 
-  return { root, roofGroup, upperGroup, center, size };
+  // Everything the scenery needs to know to stay off the lot, the road and the driveway (world units).
+  const siteInfo = {
+    lotW,
+    lotD,
+    roadCenterZ: zRoad,
+    roadFarZ: lotD / 2 + sidewalkD + 0.25 + roadD,
+    house: { x0: X(minX), x1: X(maxX), z0: Z(maxY), z1: Z(minY) },
+    garage: garageRoom ? { x0: X(garageRoom.x), x1: X(garageRoom.x + garageRoom.w), frontZ: Z(garageRoom.y) } : null,
+    frontDoor,
+  };
+
+  return { root, roofGroup, upperGroup, center, size, site: siteInfo };
 }

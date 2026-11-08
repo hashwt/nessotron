@@ -241,6 +241,32 @@ export const textures = {
       speckle(g, w, h, r, 2000, (r) => gray(0, 0.04), 2);
     }),
 
+  sand: () =>
+    make('sand', 512, 512, 4, 4, (g, w, h, r) => {
+      g.fillStyle = '#d8c19a';
+      g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 50; i++) {
+        g.fillStyle = `rgba(${170 + r() * 50},${140 + r() * 40},${100 + r() * 30},0.18)`;
+        g.beginPath();
+        g.ellipse(r() * w, r() * h, 40 + r() * 90, 10 + r() * 25, r() * 3, 0, Math.PI * 2);
+        g.fill();
+      }
+      speckle(g, w, h, r, 25000, (r) => `rgba(${120 + r() * 120},${100 + r() * 90},${70 + r() * 60},0.5)`, 2);
+    }),
+
+  // Crop rows, drawn in grays so the field color comes from material.color.
+  crops: () =>
+    make('crops', 256, 256, 4, 4, (g, w, h, r) => {
+      g.fillStyle = '#d9d9d9';
+      g.fillRect(0, 0, w, h);
+      const rows = 16;
+      for (let i = 0; i < rows; i++) {
+        g.fillStyle = gray(140 + Math.floor(r() * 30));
+        g.fillRect(0, (i * h) / rows, w, h / rows / 2.2);
+      }
+      speckle(g, w, h, r, 6000, (r) => gray(r() > 0.5 ? 60 : 255, 0.15), 2);
+    }),
+
   garageDoor: () =>
     make('garagedoor', 512, 256, 1, 1, (g, w, h) => {
       g.fillStyle = '#ececec';

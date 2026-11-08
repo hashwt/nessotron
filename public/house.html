@@ -54,6 +54,11 @@
     .hist-del:hover { color: var(--bad); background: #fbeeec; }
     .toolbar .nav { padding: 4px 9px; font-size: 12px; }
     .toolbar .nav:disabled { opacity: .35; cursor: default; }
+    .toolbar { flex-wrap: wrap; justify-content: flex-end; max-width: calc(100% - 24px); }
+    .toolbar select { padding: 4px 6px; font-size: 12px; }
+    .toolbar .sep { width: 1px; align-self: stretch; background: var(--line); }
+    .scenery-label { position: absolute; left: 12px; bottom: 12px; font-size: 12px; color: #1f2328; background: rgba(255,255,255,.85); padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); }
+    .scenery-label:empty { display: none; }
     .toolbar .pos { font-size: 12px; color: var(--muted); min-width: 34px; text-align: center; }
     .room-label { font: 600 11px system-ui, sans-serif; color: #1f2328; background: rgba(255,255,255,.85); padding: 1px 5px; border-radius: 4px; white-space: nowrap; }
     @media (max-width: 760px) {
@@ -122,8 +127,13 @@
         <button class="ghost nav" id="histNewer" type="button" title="Newer design" disabled>▶</button>
         <label class="check" title="Turn the roof off to see inside and show room names"><input type="checkbox" id="showRoof" checked> Roof</label>
         <label class="check"><input type="checkbox" id="showUpper" checked> Upper floors</label>
+        <span class="sep"></span>
+        <select id="scenery" title="Surroundings"><option value="random">Random scenery</option></select>
+        <button class="ghost nav" id="reroll" type="button" title="Roll different scenery">🎲</button>
+        <span class="sep"></span>
         <button class="ghost" id="exportBtn" type="button" disabled>Download .glb</button>
       </div>
+      <div class="scenery-label" id="sceneryLabel"></div>
     </main>
   </div>
 

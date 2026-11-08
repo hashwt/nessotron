@@ -4,7 +4,7 @@
 
 **An AI-powered, Pokémon-inspired financial wellness platform that makes financial planning, education, and decision-making interactive, immersive, and accessible.**
 
-**Built for HackUTD 2026 | PNC 360° Financial Health Navigator Challenge**
+**Built for HackUTD 2026 
 
 ---
 

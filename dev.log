@@ -1,0 +1,31 @@
+[33m(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./server/api" without a file extension (vite.config.ts:6:37). Add the file extension
+  - import "./nessie" without a file extension (server/api.ts:5:103). Add the file extension
+  - import "./agent" without a file extension (server/api.ts:6:42). Add the file extension
+  - import "./persona" without a file extension (server/api.ts:7:33). Add the file extension
+  - import "./curriculum" without a file extension (server/api.ts:8:58). Add the file extension
+  - import "../src/lib/missions" without a file extension (server/api.ts:9:26). Add the file extension
+  - import "../src/lib/types" without a file extension (server/nessie.ts:7:52). Add the file extension
+  - import "./types" without a file extension (src/lib/missions.ts:5:31). Add the file extension
+  - import "../src/lib/types" without a file extension (server/curriculum.ts:19:31). Add the file extension
+  - import "./nemotron" without a file extension (server/persona.ts:16:43). Add the file extension
+  - import "../src/lib/types" without a file extension (server/agent.ts:6:69). Add the file extension
+  - import "./finance" without a file extension (src/lib/missions.ts:13:8). Add the file extension
+  - import "../src/lib/missions" without a file extension (server/curriculum.ts:20:30). Add the file extension
+  - import "../src/lib/finance" without a file extension (server/agent.ts:7:76). Add the file extension
+  - import "./types" without a file extension (src/lib/missions.ts:14:25). Add the file extension
+  - import "../src/lib/missions" without a file extension (server/curriculum.ts:25:8). Add the file extension
+  - import "./nemotron" without a file extension (server/agent.ts:8:58). Add the file extension
+  - import "../src/lib/finance" without a file extension (server/curriculum.ts:26:29). Add the file extension
+  - import "../src/lib/missions" without a file extension (server/agent.ts:9:30). Add the file extension
+  - import "./finance" without a file extension (src/lib/missions.ts:15:36). Add the file extension
+  - import "./nemotron" without a file extension (server/curriculum.ts:27:58). Add the file extension
+  - import "./types" without a file extension (src/lib/finance.ts:3:48). Add the file extension
+  - import "./types" without a file extension (src/lib/finance.ts:4:34). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.[39m
+
+  [32m[1mVITE[22m v8.3.6[39m  [2mready in [0m[1m507[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m8080[22m/[39m
+[2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>House Designer</title>
+  <style>
+    :root {
+      --bg: #f6f5f2; --panel: #ffffff; --text: #1f2328; --muted: #6a6f76; --line: #e2e0db;
+      --accent: #2f6fde; --ok: #1a7f37; --bad: #c4321c;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; font: 14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--text); background: var(--bg); }
+    .app { display: grid; grid-template-columns: 340px 1fr; height: 100vh; }
+    aside { background: var(--panel); border-right: 1px solid var(--line); padding: 18px; overflow-y: auto; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin: 0 0 16px; }
+    form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+    label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+    label.full { grid-column: 1 / -1; }
+    label.check { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 13px; }
+    input, select, textarea { font: inherit; padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--text); }
+    textarea { resize: vertical; min-height: 60px; }
+    button { font: inherit; padding: 9px 12px; border: 0; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: wait; }
+    button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+    #go { grid-column: 1 / -1; margin-top: 4px; }
+    .section { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+    .section h2 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    #log { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+    #log li.ok { color: var(--ok); } #log li.bad { color: var(--bad); }
+    #log ul { margin: 4px 0 0; padding-left: 18px; color: var(--muted); }
+    #result p { margin: 0 0 8px; }
+    .cost { font-size: 20px; font-weight: 600; }
+    main { position: relative; overflow: hidden; }
+    #view { position: absolute; inset: 0; }
+    .toolbar { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; background: rgba(255,255,255,.92); padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); align-items: center; }
+    .toolbar label.check { font-size: 12px; }
+    .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; text-align: center; padding: 16px; }
+    .room-label { font: 600 11px system-ui, sans-serif; color: #1f2328; background: rgba(255,255,255,.85); padding: 1px 5px; border-radius: 4px; white-space: nowrap; }
+    @media (max-width: 760px) {
+      .app { grid-template-columns: 1fr; grid-template-rows: auto 70vh; height: auto; }
+      aside { border-right: 0; border-bottom: 1px solid var(--line); }
+      main { min-height: 70vh; }
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <h1>House Designer</h1>
+      <p class="sub">Describe what the customer needs. Claude designs a floor plan, checks it against the rules, and the house appears in 3D.</p>
+
+      <form id="form">
+        <label>Bedrooms <input name="bedrooms" type="number" min="0" max="8" value="3"></label>
+        <label>Bathrooms <input name="bathrooms" type="number" min="1" max="6" value="2"></label>
+        <label>Style
+          <select name="style">
+            <option value="modern">Modern</option>
+            <option value="farmhouse">Farmhouse</option>
+            <option value="traditional">Traditional</option>
+            <option value="minimalist">Minimalist</option>
+          </select>
+        </label>
+        <label>Budget (USD) <input name="budget" type="number" min="50000" step="10000" value="400000"></label>
+        <label>Lot width (m) <input name="lotWidth" type="number" min="8" max="100" step="0.5" value="15"></label>
+        <label>Lot depth (m) <input name="lotDepth" type="number" min="8" max="100" step="0.5" value="30"></label>
+        <label>Setback (m) <input name="setback" type="number" min="0" max="10" step="0.5" value="2"></label>
+        <label>Max floors <input name="maxFloors" type="number" min="1" max="3" value="2"></label>
+        <label class="check full"><input name="garage" type="checkbox" checked> Garage</label>
+        <label class="full">Other wishes
+          <textarea name="notes" placeholder="e.g. open kitchen and living, home office, main bedroom with its own bathroom"></textarea>
+        </label>
+        <button id="go" type="submit">Design house</button>
+      </form>
+
+      <div class="section" id="progress" hidden>
+        <h2>Progress</h2>
+        <ul id="log"></ul>
+      </div>
+
+      <div class="section" id="result" hidden></div>
+    </aside>
+
+    <main>
+      <div id="view"></div>
+      <div class="empty" id="empty">Fill in the form and press “Design house”.</div>
+      <div class="toolbar">
+        <label class="check" title="Turn the roof off to see inside and show room names"><input type="checkbox" id="showRoof" checked> Roof</label>
+        <label class="check"><input type="checkbox" id="showUpper" checked> Upper floors</label>
+        <button class="ghost" id="exportBtn" type="button" disabled>Download .glb</button>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="house/app.js"></script>
+</body>
+</html>

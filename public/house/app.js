@@ -214,6 +214,7 @@ $('form').addEventListener('submit', async (e) => {
   $('result').hidden = true;
   log.innerHTML = '';
   framed = false;
+  pendingRounds = [];
 
   try {
     const res = await fetch('/api/design', {
@@ -280,6 +281,8 @@ if (params.has('demo')) {
   if (params.get('view') === 'top') camera.position.set(current.center.x, current.center.y + 40, current.center.z + 0.1);
 }
 
+let pendingRounds = [];
+
 function handleEvent(ev, req) {
   if (ev.type === 'status') {
     if (status) status.remove();
@@ -287,13 +290,143 @@ function handleEvent(ev, req) {
   } else if (ev.type === 'check') {
     if (status) status.remove();
     status = null;
+    const round = { round: ev.round, ok: ev.ok, cost: ev.cost, problems: ev.problems, plan: ev.plan };
+    pendingRounds.push(round);
     showPlan(ev.plan, req);
-    if (ev.ok) addLog(`Round ${ev.round}: plan passes all checks (${money(ev.cost)}).`, 'ok');
-    else addLog(`Round ${ev.round}: ${ev.problems.length} problem(s) found, fixing…`, 'bad', ev.problems);
+    addRoundLog(round, req);
   } else if (ev.type === 'done') {
     showPlan(ev.plan, req);
     showResult(ev);
+    saveToHistory({ req, plan: ev.plan, cost: ev.cost, problems: ev.problems, summary: ev.summary, rounds: pendingRounds });
   } else if (ev.type === 'error') {
     addLog('Error: ' + ev.message, 'bad');
   }
 }
+
+// A round in the Progress list. Click it to view that draft in 3D.
+function addRoundLog(round, req) {
+  const text = round.ok
+    ? `Round ${round.round}: plan passes all checks (${money(round.cost)}).`
+    : `Round ${round.round}: ${round.problems.length} problem(s) found, fixing…`;
+  const li = addLog(text, round.ok ? 'ok' : 'bad', round.ok ? [] : round.problems);
+  li.classList.add('round');
+  li.title = 'Click to view this draft';
+  li.addEventListener('click', () => {
+    showPlan(round.plan, req);
+    for (const other of log.querySelectorAll('li.round')) other.classList.toggle('active', other === li);
+  });
+}
+
+// --- Design history (saved in this browser) ----------------------------------
+const HISTORY_KEY = 'houseDesigner.history.v1';
+const HISTORY_MAX = 30;
+let history = loadHistory();
+let historyIndex = -1;
+
+function loadHistory() {
+  try {
+    const data = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistHistory() {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  } catch {
+    // Storage full or blocked: keep only final plans (drop drafts) and try once more.
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history.map((h) => ({ ...h, rounds: [] }))));
+    } catch {
+      /* history still works for this session */
+    }
+  }
+}
+
+function saveToHistory(entry) {
+  history.unshift({ id: Date.now().toString(36), createdAt: new Date().toISOString(), ...entry });
+  history = history.slice(0, HISTORY_MAX);
+  persistHistory();
+  historyIndex = 0;
+  renderHistory();
+}
+
+function openHistory(index) {
+  const entry = history[index];
+  if (!entry) return;
+  historyIndex = index;
+  framed = false;
+  showPlan(entry.plan, entry.req);
+  showResult(entry);
+  fillForm(entry.req);
+  // Rebuild the Progress list from the saved drafts.
+  log.innerHTML = '';
+  $('progress').hidden = !entry.rounds || !entry.rounds.length;
+  for (const round of entry.rounds || []) addRoundLog(round, entry.req);
+  renderHistory();
+}
+
+function deleteHistory(index) {
+  history.splice(index, 1);
+  persistHistory();
+  if (historyIndex === index) historyIndex = -1;
+  else if (historyIndex > index) historyIndex--;
+  renderHistory();
+}
+
+function fillForm(req) {
+  const form = $('form');
+  for (const [name, value] of Object.entries(req)) {
+    const field = form.elements[name];
+    if (!field) continue;
+    if (field.type === 'checkbox') field.checked = Boolean(value);
+    else field.value = value;
+  }
+}
+
+function renderHistory() {
+  const list = $('historyList');
+  list.innerHTML = '';
+  $('historySection').hidden = history.length === 0;
+  history.forEach((h, i) => {
+    const li = document.createElement('li');
+    li.className = i === historyIndex ? 'active' : '';
+    const info = document.createElement('button');
+    info.type = 'button';
+    info.className = 'hist-open';
+    const title = document.createElement('strong');
+    title.textContent = h.plan.name || 'Design';
+    const meta = document.createElement('span');
+    const when = new Date(h.createdAt);
+    meta.textContent = `${h.plan.style} · ${h.req.bedrooms} bed · ${h.req.bathrooms} bath · ${money(h.cost)} · ${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    info.append(title, meta);
+    info.addEventListener('click', () => openHistory(i));
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'hist-del';
+    del.textContent = '×';
+    del.title = 'Delete this design';
+    del.addEventListener('click', () => deleteHistory(i));
+    li.append(info, del);
+    list.appendChild(li);
+  });
+  // Back/forward in the toolbar: ◀ goes to older designs, ▶ to newer ones.
+  $('histPos').textContent = history.length ? `${historyIndex >= 0 ? historyIndex + 1 : '–'} / ${history.length}` : '';
+  $('histOlder').disabled = historyIndex >= history.length - 1 || !history.length;
+  $('histNewer').disabled = historyIndex <= 0;
+}
+
+$('histOlder').addEventListener('click', () => openHistory(historyIndex < 0 ? 0 : historyIndex + 1));
+$('histNewer').addEventListener('click', () => openHistory(historyIndex - 1));
+$('histClear').addEventListener('click', () => {
+  if (!confirm('Delete all saved designs?')) return;
+  history = [];
+  historyIndex = -1;
+  persistHistory();
+  renderHistory();
+});
+renderHistory();
+// Reopen the most recent design after a page reload.
+if (!params.has('demo') && history.length) openHistory(0);
